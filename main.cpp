@@ -1,8 +1,12 @@
+#include <cmath>
+#include <cstdint>
+#include <iomanip>
 #include <iostream>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv4/opencv2/imgproc.hpp>
+#include <sstream>
 
 #ifdef WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -32,6 +36,33 @@ const int numElements = sizeof(nums) / sizeof(nums[0]);
 const string density = " `.-':_,^=;><+!rc*/"
                        "z?sLTv)J7(|Fi{C}fI31tlu[neoZ5Yxjya]"
                        "2ESwqkP6h9d4VpOGbUAKXHm8RD#$Bg0MNWQ%&@";
+const int ANSI_COLORS[8][3] = {
+    {0, 0, 0},      // black
+    {170, 0, 0},    // red
+    {0, 170, 0},    // green
+    {170, 85, 0},   // yellow
+    {0, 0, 170},    // blue
+    {170, 0, 170},  // magenta
+    {0, 170, 170},  // cyan
+    {170, 170, 170} // white
+};
+
+int closest_ansi_color(int r, int g, int b) {
+    int min_distance = INT_MAX;
+    int min_index = 0;
+    for (int i = 0; i < 8; ++i) {
+        int dr = r - ANSI_COLORS[i][0];
+        int dg = g - ANSI_COLORS[i][1];
+        int db = b - ANSI_COLORS[i][2];
+        int distance = sqrt(dr * dr + dg * dg + db * db);
+        if (distance < min_distance) {
+            min_distance = distance;
+            min_index = i;
+        }
+    }
+    return 30 + min_index;
+}
+
 void get_terminal_size(int &width, int &height) {
 #ifdef WIN32 // get terminal width/height on Windows
     CONSOLE_SCREEN_BUFFER_INFO csbi;
@@ -73,29 +104,52 @@ int main(int argc, char *argv[]) {
     VideoCapture cap(0);
     int width, height;
     while (true) {
-        Mat caprtured_frame, scaled_frame, flipped_frame, final_frame;
+        Mat caprtured_frame, scaled_frame, color_frame, final_frame;
         get_terminal_size(width, height);
         cap.read(caprtured_frame);
         resize(caprtured_frame, scaled_frame, Size(width, height),
                INTER_LINEAR);
-        flip(scaled_frame, flipped_frame, 1);
-        cvtColor(flipped_frame, final_frame, COLOR_BGR2GRAY);
+        flip(scaled_frame, color_frame, 1);
+        cvtColor(color_frame, final_frame, COLOR_BGR2GRAY);
         double min, max;
         minMaxIdx(final_frame, &min, &max);
         float difference = max - min;
-        char ascii_matrix[height][width];
-
+        // keep track of last brightness value and its associated char to reduce
+        // get_ascii_char_index() function calls for adjacent, similar(with
+        // regards to a tolerance) pixels and also keep track of last ansi color
+        uint8_t brightness_tolerance = 10;
+        uint8_t last_brigthness = 0;
+        char last_char = ' ';
+        string hex_color = "#000000";
+        Clear();
         for (size_t i = 0; i < height; i++) {
             for (size_t j = 0; j < width; j++) {
-                int density_index = get_ascii_char_index(
-                    (final_frame.at<uint8_t>(i, j) - min) / difference);
-                ascii_matrix[i][j] = density[density_index];
-            }
-        }
-        Clear();
-        for (auto &row : ascii_matrix) {
-            for (auto &character : row) {
-                cout << character;
+                uint8_t curr_brightness = final_frame.at<uint8_t>(i, j);
+                if (abs(curr_brightness - last_brigthness) <
+                    brightness_tolerance) {
+                    cout << "\033[38;2;" << stoi(hex_color.substr(1, 2), 0, 16)
+                         << ";" << stoi(hex_color.substr(3, 2), 0, 16) << ";"
+                         << stoi(hex_color.substr(5, 2), 0, 16) << "m"
+                         << last_char << "\033[0m";
+                    continue;
+                }
+                Vec3b pixel = color_frame.at<Vec3b>(i, j);
+                int b = pixel[0];
+                int g = pixel[1];
+                int r = pixel[2];
+                stringstream hex_color_stream;
+                hex_color_stream << "#" << setfill('0') << setw(2) << hex << r
+                                 << setfill('0') << setw(2) << hex << g
+                                 << setfill('0') << setw(2) << hex << b;
+                hex_color = hex_color_stream.str();
+                int density_index =
+                    get_ascii_char_index((curr_brightness - min) / difference);
+                last_char = density[density_index];
+                last_brigthness = curr_brightness;
+                cout << "\033[38;2;" << stoi(hex_color.substr(1, 2), 0, 16)
+                     << ";" << stoi(hex_color.substr(3, 2), 0, 16) << ";"
+                     << stoi(hex_color.substr(5, 2), 0, 16) << "m" << last_char
+                     << "\033[0m";
             }
             cout << endl;
         }
