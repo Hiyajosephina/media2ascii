@@ -1,12 +1,9 @@
 #include <cmath>
-#include <cstdint>
-#include <iomanip>
 #include <iostream>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv4/opencv2/imgproc.hpp>
-#include <sstream>
 
 #ifdef WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -39,6 +36,7 @@ const string DENSITY = " `.-':_,^=;><+!rc*/"
 
 const int INITIAL_TOLERANCE = 15;
 const int INITIAL_MODE = 0;
+const bool INITAL_HAS_COLOR = true;
 
 void get_terminal_size(int &, int &);
 void Clear();
@@ -90,7 +88,8 @@ bool is_number(string number) {
     return true;
 }
 
-void convert_to_ascii(Mat frame0, uint8_t brightness_tolerance) {
+void convert_to_ascii(Mat frame0, uint8_t brightness_tolerance,
+                      bool has_color) {
     int width, height;
     Mat frame1;
     get_terminal_size(width, height);
@@ -111,18 +110,26 @@ void convert_to_ascii(Mat frame0, uint8_t brightness_tolerance) {
         for (int j = 0; j < width; j++) {
             uint8_t curr_brightness = frame1.at<uint8_t>(i, j);
             if (abs(curr_brightness - last_brigthness) < brightness_tolerance) {
+                if (!has_color) {
+                    cout << last_char;
+                    continue;
+                }
                 cout << "\033[38;2;" << r << ";" << g << ";" << b << "m"
                      << last_char << "\033[0m";
+                continue;
+            }
+            int density_index =
+                get_ascii_char_index((curr_brightness - min) / difference);
+            last_char = DENSITY[density_index];
+            last_brigthness = curr_brightness;
+            if (!has_color) {
+                cout << last_char;
                 continue;
             }
             Vec3b pixel = frame0.at<Vec3b>(i, j);
             r = pixel[2];
             g = pixel[1];
             b = pixel[0];
-            int density_index =
-                get_ascii_char_index((curr_brightness - min) / difference);
-            last_char = DENSITY[density_index];
-            last_brigthness = curr_brightness;
             cout << "\033[38;2;" << r << ";" << g << ";" << b << "m"
                  << last_char << "\033[0m";
         }
@@ -132,6 +139,7 @@ void convert_to_ascii(Mat frame0, uint8_t brightness_tolerance) {
 int main(int argc, char *argv[]) {
     int tolerance = INITIAL_TOLERANCE;
     int mode = INITIAL_MODE;
+    bool has_color = INITAL_HAS_COLOR;
     string path;
     for (int i = 1; i < argc; i++) {
         if (i < argc - 1 && (strcmp(argv[i], "--tolerance") == 0 ||
@@ -156,13 +164,16 @@ int main(int argc, char *argv[]) {
             path = argv[i + 1];
             mode = 2;
         }
+        if (strcmp(argv[i], "--no-color") == 0) {
+            has_color = false;
+        }
     }
     if (mode == 0) {
         VideoCapture cap(0);
         while (true) {
             Mat captured_frame;
             cap.read(captured_frame);
-            convert_to_ascii(captured_frame, tolerance);
+            convert_to_ascii(captured_frame, tolerance, has_color);
         }
         return 0;
     }
@@ -172,7 +183,7 @@ int main(int argc, char *argv[]) {
             cout << "Could not read the image: " << path << endl;
             return 1;
         }
-        convert_to_ascii(captured_frame, tolerance);
+        convert_to_ascii(captured_frame, tolerance, has_color);
         return 0;
     }
     if (mode == 2) {
@@ -182,7 +193,7 @@ int main(int argc, char *argv[]) {
             cap.read(captured_frame);
             if (captured_frame.empty())
                 break;
-            convert_to_ascii(captured_frame, tolerance);
+            convert_to_ascii(captured_frame, tolerance, has_color);
         }
         return 0;
     }
