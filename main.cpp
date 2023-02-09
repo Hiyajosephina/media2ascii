@@ -1,4 +1,3 @@
-#include <bits/types/clock_t.h>
 #include <cmath>
 #include <cstdint>
 #include <iomanip>
@@ -39,6 +38,7 @@ const string DENSITY = " `.-':_,^=;><+!rc*/"
                        "2ESwqkP6h9d4VpOGbUAKXHm8RD#$Bg0MNWQ%&@";
 
 const int INITIAL_TOLERANCE = 15;
+const int INITIAL_MODE = 0;
 
 void get_terminal_size(int &, int &);
 void Clear();
@@ -82,11 +82,18 @@ int get_ascii_char_index(float brightness) {
         return l - 1;
 }
 
+bool is_number(string number) {
+    for (int i = 0; number[i] != 0; i++) {
+        if (!isdigit(number[i]))
+            return false;
+    }
+    return true;
+}
+
 void convert_to_ascii(Mat frame0, uint8_t brightness_tolerance) {
     int width, height;
     Mat frame1;
     get_terminal_size(width, height);
-    // cap.read(captured_frame);
     resize(frame0, frame1, Size(width, height), INTER_LINEAR);
     flip(frame1, frame0, 1);
     cvtColor(frame0, frame1, COLOR_BGR2GRAY);
@@ -124,7 +131,28 @@ void convert_to_ascii(Mat frame0, uint8_t brightness_tolerance) {
 }
 int main(int argc, char *argv[]) {
     int tolerance = INITIAL_TOLERANCE;
-    if (argc < 2 || atoi(argv[1]) == 0) {
+    int mode = INITIAL_MODE;
+    string path;
+    for (int i = 1; i < argc; i++) {
+        if (i < argc - 1 && (strcmp(argv[i], "--tolerance") == 0 ||
+                             strcmp(argv[i], "-t") == 0)) {
+            string tol_string = argv[i + 1];
+            if (!is_number(tol_string) || stoi(tol_string) > 255) {
+                cout << "Please enter a valid tolerance (0-255)" << endl;
+                return 1;
+            }
+            tolerance = stoi(tol_string);
+        }
+        if (strcmp(argv[i], "--webcam") == 0 || strcmp(argv[i], "-w") == 0) {
+            mode = 0;
+        }
+        if (i < argc - 1 &&
+            (strcmp(argv[i], "--image") == 0 || strcmp(argv[i], "-i") == 0)) {
+            path = argv[i + 1];
+            mode = 1;
+        }
+    }
+    if (mode == 0) {
         VideoCapture cap(0);
         while (true) {
             Mat captured_frame;
@@ -133,11 +161,10 @@ int main(int argc, char *argv[]) {
         }
         return 0;
     }
-    if (atoi(argv[1]) == 1) {
-        string image_path = samples::findFile(argv[2]);
-        Mat captured_frame = imread(image_path, IMREAD_COLOR);
+    if (mode == 1) {
+        Mat captured_frame = imread(path, IMREAD_COLOR);
         if (captured_frame.empty()) {
-            cout << "Could not read the image: " << image_path << endl;
+            cout << "Could not read the image: " << path << endl;
             return 1;
         }
         convert_to_ascii(captured_frame, tolerance);
