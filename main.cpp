@@ -151,6 +151,11 @@ int main(int argc, char *argv[]) {
             path = argv[i + 1];
             mode = 1;
         }
+        if (i < argc - 1 &&
+            (strcmp(argv[i], "--video") == 0 || strcmp(argv[i], "-v") == 0)) {
+            path = argv[i + 1];
+            mode = 2;
+        }
     }
     if (mode == 0) {
         VideoCapture cap(0);
@@ -168,6 +173,17 @@ int main(int argc, char *argv[]) {
             return 1;
         }
         convert_to_ascii(captured_frame, tolerance);
+        return 0;
+    }
+    if (mode == 2) {
+        VideoCapture cap(path);
+        while (true) {
+            Mat captured_frame;
+            cap.read(captured_frame);
+            if (captured_frame.empty())
+                break;
+            convert_to_ascii(captured_frame, tolerance);
+        }
         return 0;
     }
     return 1;
