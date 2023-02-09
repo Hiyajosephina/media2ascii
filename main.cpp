@@ -1,3 +1,4 @@
+#include <bits/types/clock_t.h>
 #include <cmath>
 #include <cstdint>
 #include <iomanip>
@@ -37,6 +38,13 @@ const string DENSITY = " `.-':_,^=;><+!rc*/"
                        "z?sLTv)J7(|Fi{C}fI31tlu[neoZ5Yxjya]"
                        "2ESwqkP6h9d4VpOGbUAKXHm8RD#$Bg0MNWQ%&@";
 
+const int INITIAL_TOLERANCE = 15;
+
+void get_terminal_size(int &, int &);
+void Clear();
+int get_ascii_char_index(float);
+void convert_to_ascii(Mat);
+
 void get_terminal_size(int &width, int &height) {
 #ifdef WIN32 // get terminal width/height on Windows
     CONSOLE_SCREEN_BUFFER_INFO csbi;
@@ -62,7 +70,7 @@ void Clear() {
 int get_ascii_char_index(float brightness) {
     int l = 0, r = NUM_ELEMENTS;
     while (l < r) {
-        int m = (l + r) / 2;
+        int m = (l + r) >> 1;
         if (NUMS[m] < brightness)
             l = m + 1;
         else
@@ -74,51 +82,66 @@ int get_ascii_char_index(float brightness) {
         return l - 1;
 }
 
-int main(int argc, char *argv[]) {
-    VideoCapture cap(0);
+void convert_to_ascii(Mat frame0, uint8_t brightness_tolerance) {
     int width, height;
-    while (true) {
-        Mat caprtured_frame, scaled_frame, color_frame, final_frame;
-        get_terminal_size(width, height);
-        cap.read(caprtured_frame);
-        resize(caprtured_frame, scaled_frame, Size(width, height),
-               INTER_LINEAR);
-        flip(scaled_frame, color_frame, 1);
-        cvtColor(color_frame, final_frame, COLOR_BGR2GRAY);
-        double min, max;
-        minMaxIdx(final_frame, &min, &max);
-        float difference = max - min;
-        // keep track of last brightness value and its associated char to reduce
-        // get_ascii_char_index() function calls for adjacent, similar(with
-        // regards to a tolerance) pixels and also keep track of last ansi color
-        uint8_t brightness_tolerance = 15;
-        uint8_t last_brigthness = 0;
-        char last_char = ' ';
-        int r = 0, g = 0, b = 0;
-        int similar = 0;
-        Clear();
-        for (size_t i = 0; i < height; i++) {
-            for (size_t j = 0; j < width; j++) {
-                uint8_t curr_brightness = final_frame.at<uint8_t>(i, j);
-                if (abs(curr_brightness - last_brigthness) <
-                    brightness_tolerance) {
-                    cout << "\033[38;2;" << r << ";" << g << ";" << b << "m"
-                         << last_char << "\033[0m";
-                    continue;
-                }
-                Vec3b pixel = color_frame.at<Vec3b>(i, j);
-                r = pixel[2];
-                g = pixel[1];
-                b = pixel[0];
-                int density_index =
-                    get_ascii_char_index((curr_brightness - min) / difference);
-                last_char = DENSITY[density_index];
-                last_brigthness = curr_brightness;
+    Mat frame1;
+    get_terminal_size(width, height);
+    // cap.read(captured_frame);
+    resize(frame0, frame1, Size(width, height), INTER_LINEAR);
+    flip(frame1, frame0, 1);
+    cvtColor(frame0, frame1, COLOR_BGR2GRAY);
+    double min, max;
+    minMaxIdx(frame1, &min, &max);
+    float difference = max - min;
+    // keep track of last brightness value and its associated char to reduce
+    // get_ascii_char_index() function calls for adjacent, similar(with
+    // regards to a tolerance) pixels and also keep track of last ansi color
+    uint8_t last_brigthness = 0;
+    char last_char = ' ';
+    int r = 0, g = 0, b = 0;
+    Clear();
+    for (int i = 0; i < height; i++) {
+        for (int j = 0; j < width; j++) {
+            uint8_t curr_brightness = frame1.at<uint8_t>(i, j);
+            if (abs(curr_brightness - last_brigthness) < brightness_tolerance) {
                 cout << "\033[38;2;" << r << ";" << g << ";" << b << "m"
                      << last_char << "\033[0m";
+                continue;
             }
-            cout << endl;
+            Vec3b pixel = frame0.at<Vec3b>(i, j);
+            r = pixel[2];
+            g = pixel[1];
+            b = pixel[0];
+            int density_index =
+                get_ascii_char_index((curr_brightness - min) / difference);
+            last_char = DENSITY[density_index];
+            last_brigthness = curr_brightness;
+            cout << "\033[38;2;" << r << ";" << g << ";" << b << "m"
+                 << last_char << "\033[0m";
         }
+        cout << endl;
     }
-    return 0;
+}
+int main(int argc, char *argv[]) {
+    int tolerance = INITIAL_TOLERANCE;
+    if (argc < 2 || atoi(argv[1]) == 0) {
+        VideoCapture cap(0);
+        while (true) {
+            Mat captured_frame;
+            cap.read(captured_frame);
+            convert_to_ascii(captured_frame, tolerance);
+        }
+        return 0;
+    }
+    if (atoi(argv[1]) == 1) {
+        string image_path = samples::findFile(argv[2]);
+        Mat captured_frame = imread(image_path, IMREAD_COLOR);
+        if (captured_frame.empty()) {
+            cout << "Could not read the image: " << image_path << endl;
+            return 1;
+        }
+        convert_to_ascii(captured_frame, tolerance);
+        return 0;
+    }
+    return 1;
 }
