@@ -4,6 +4,7 @@
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv4/opencv2/imgproc.hpp>
+#include <string>
 
 #ifdef WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -13,7 +14,9 @@
 #include <sys/ioctl.h>
 #endif
 
-using namespace std;
+using std::cout;
+using std::endl;
+using std::string;
 using namespace cv;
 
 const float NUMS[] = {
@@ -105,37 +108,35 @@ void convert_to_ascii(Mat frame0, uint8_t brightness_tolerance,
     uint8_t last_brigthness = 0;
     char last_char = ' ';
     int r = 0, g = 0, b = 0;
+    string line = "";
     Clear();
     for (int i = 0; i < height; i++) {
         for (int j = 0; j < width; j++) {
             uint8_t curr_brightness = frame1.at<uint8_t>(i, j);
             if (abs(curr_brightness - last_brigthness) < brightness_tolerance) {
-                if (!has_color) {
-                    cout << last_char;
-                    continue;
-                }
-                cout << "\033[38;2;" << r << ";" << g << ";" << b << "m"
-                     << last_char << "\033[0m";
+                line += last_char;
                 continue;
+            }
+            if (!has_color) {
+                cout << line;
+            } else {
+                cout << "\033[38;2;" << r << ";" << g << ";" << b << "m" << line
+                     << "\033[0m";
             }
             int density_index =
                 get_ascii_char_index((curr_brightness - min) / difference);
             last_char = DENSITY[density_index];
             last_brigthness = curr_brightness;
-            if (!has_color) {
-                cout << last_char;
-                continue;
-            }
             Vec3b pixel = frame0.at<Vec3b>(i, j);
             r = pixel[2];
             g = pixel[1];
             b = pixel[0];
-            cout << "\033[38;2;" << r << ";" << g << ";" << b << "m"
-                 << last_char << "\033[0m";
+            line = last_char;
         }
-        cout << endl;
+        line += '\n';
     }
 }
+
 int main(int argc, char *argv[]) {
     int tolerance = INITIAL_TOLERANCE;
     int mode = INITIAL_MODE;
